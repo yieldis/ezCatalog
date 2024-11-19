@@ -14,7 +14,9 @@ var PASTA_CONFIG = {
    "pagesBotElementId": "paginationBot", // Element to display result page links below results
    "showPages": 5, // MUST BE ODD NUMBER! Max number of page links to show
    "sortDiv": "sortDiv", // Element with interactive sort options
-   "useCiteService": true // true if we should use EDI Cite service to build citations instead of building from PASTA results
+   "useCiteService": true, // true if we should use EDI Cite service to build citations instead of building from PASTA results
+   "showAbstracts": true, // true if we should show abstracts in search results
+   "abstractLimit": 1000 // Limit the number of characters in the abstract
 };
 
 var QUERY_URL = ""; // Query URL without row limit or start parameter
@@ -31,20 +33,30 @@ function getParameterByName(name, url) {
 }
 
 // Parse citation dictionary into HTML
-function buildHtml(citations) {
+function buildHtml(citations, abstracts) {
    var html = [];
    var citationCount = Object.keys(citations).length;
 
    for (var i = 0; i < citationCount; i++) {
       var citation = citations[i];
+      var abstract = abstracts[i];
+      if (abstract.length > PASTA_CONFIG["abstractLimit"]) {
+         abstract = abstract.substring(0, PASTA_CONFIG["abstractLimit"]) + "...";
+      }
       var authors = citation["authors"];
       var date = (citation["pub_year"]) ? " Published " + citation["pub_year"] + "" : "";
       // default ESIP formatting has trailing period after DOI
-     var link = "https://portal-s.edirepository.org/nis/mapbrowse?packageid=" + citation["pid"];
+      var link = "https://portal-s.edirepository.org/nis/mapbrowse?packageid=" + citation["pid"];
       var title = '<a rel="external noopener" href="' + link + '" target="_blank" aria-label="open data in new tab">' + citation["title"] + '</a>';
-      var row = '<p><span class="dataset-title">' + title +
-         '</span><br><span class="dataset-author">' + authors + date +
-         '</span></p>';
+      if (PASTA_CONFIG["showAbstracts"]) {
+         var row = '<p><span class="dataset-title">' + title +
+            '</span><br><span class="dataset-author">' + authors + date +
+            '</span><br>' + abstract + '</p>';
+      } else {
+         var row = '<p><span class="dataset-title">' + title +
+            '</span><br><span class="dataset-author">' + authors + date +
+            '</span></p>';
+      }
       html.push(row);
    }
    if (citationCount) {
@@ -55,7 +67,7 @@ function buildHtml(citations) {
 }
 
 // Download citations to a dictionary keyed by package ID
-function getCitations(packageIds) {
+function getCitations(packageIds, abstracts) {
    var header = {
       "Accept": "application/json"
    };
@@ -76,7 +88,7 @@ function getCitations(packageIds) {
 
                --callsRemaining;
                if (callsRemaining <= 0) {
-                  var html = buildHtml(citations);
+                  var html = buildHtml(citations, abstracts);
                   document.getElementById("searchResults").innerHTML = html;
                   showLoading(false);
                }
@@ -90,12 +102,14 @@ function getCitations(packageIds) {
 // Build dataset citations using Cite service, with package IDs from PASTA
 function buildCitationsFromCite(pastaDocs) {
    var packageIds = [];
+   var abstracts = [];
    for (var i = 0; i < pastaDocs.length; i++) {
       var doc = pastaDocs[i];
       packageIds.push(doc.getElementsByTagName("packageid")[0].childNodes[0].nodeValue);
+      abstracts.push(doc.getElementsByTagName("abstract")[0].childNodes[0].nodeValue);
    }
    if (packageIds.length) {
-      getCitations(packageIds);
+      getCitations(packageIds, abstracts);
    } else {
       document.getElementById("searchResults").innerHTML = "<p>Your search returned no results.</p>";
       showLoading(false);
@@ -133,9 +147,24 @@ function buildCitationsFromPasta(pastaDocs) {
       }
       var title = '<a rel="external noopener" href="' + link + '" target="_blank" aria-label="open data in new tab">' +
          doc.getElementsByTagName("title")[0].childNodes[0].nodeValue.trim() + '</a>';
-      var row = '<p><span class="dataset-title">' + title +
-         '</span><br><span class="dataset-author">' + names + date +
-         '</span></p>';
+      var abstract;
+      try {
+         abstract = '<br><span class="dataset-abstract">' + doc.getElementsByTagName("abstract")[0].childNodes[0].nodeValue + '</span>';
+         if (abstract.length > PASTA_CONFIG["abstractLimit"]) {
+            abstract = abstract.substring(0, PASTA_CONFIG["abstractLimit"]) + "...";
+         }
+      } catch (error) {
+         abstract = '';
+      }
+      if (PASTA_CONFIG["showAbstracts"]) {
+         var row = '<p><span class="dataset-title">' + title +
+            '</span><br><span class="dataset-author">' + names + date +
+            '</span>' + abstract + '</p>';
+      } else {
+         var row = '<p><span class="dataset-title">' + title +
+            '</span><br><span class="dataset-author">' + names + date +
+            '</span></p>';
+      }
       html.push(row);
    }
    var resultHtml;
@@ -203,7 +232,13 @@ function downloadCsv(count) {
          }
          var packageId = doc.getElementsByTagName("packageid")[0].childNodes[0].nodeValue;
          var title = doc.getElementsByTagName("title")[0].childNodes[0].nodeValue.trim();
-         var row = [title, names, date, doi, packageId];
+         var abstract;
+         try {
+            abstract = doc.getElementsByTagName("abstract")[0].childNodes[0].nodeValue;
+         } catch (error) {
+            abstract = '';
+         }
+         var row = [title, names, date, doi, packageId, abstract];
          allRows.push(row);
       }
 
@@ -365,6 +400,7 @@ function clearParams() {
    var areas = document.getElementById("coreArea");
    areas[0].selected = true;
    document.forms.dataSearchForm.creator.value = "";
+   document.forms.dataSearchForm.project.value = "";
 //    document.forms.dataSearchForm.identifier.value = "";
    document.forms.dataSearchForm.taxon.value = "";
    document.forms.dataSearchForm.geo.value = "";
@@ -428,7 +464,7 @@ window.onload = function () {
    }
 
    function makeQueryUrlBase(userQuery, coreArea, creator, sYear, eYear, datayear, pubyear,
-      pkgId, taxon, geo, sortBy) {
+      pkgId, taxon, geo, project, sortBy) {
 
       function makeDateQuery(sYear, eYear, datayear, pubyear) {
          var query = "";
@@ -465,7 +501,8 @@ window.onload = function () {
          "pubdate",
          "doi",
          "packageid",
-         "author"
+         "author",
+         "abstract"
       ].toString();
 
       var params = "fl=" + fields + "&defType=edismax" + PASTA_CONFIG["filter"];
@@ -474,6 +511,7 @@ window.onload = function () {
       }
       var query = "&q=" + userQuery;
       if (creator) query += "+AND+(author:" + addQuotes(creator) + "+OR+organization:" + addQuotes(creator) + ")";
+      if (project) query += "+AND+(projectTitle:" + addQuotes(project) + "+OR+relatedProjectTitle:" + addQuotes(project) + ")";
       if (pkgId) {
          pkgId = pkgId.replace(":", "%5C:");
          query += "+AND+(doi:" + pkgId + "+packageid:" + pkgId + "+id:" + pkgId + ")";
@@ -489,6 +527,7 @@ window.onload = function () {
    var query = getParameterByName("q");
    var coreAreaParam = getParameterByName("coreArea");
    var creator = getParameterByName("creator");
+   var project = getParameterByName("project");
    var sYear = parseInt(getParameterByName("s"));
    var eYear = parseInt(getParameterByName("e"));
    var datayear = getParameterByName("datayear") === "y";
@@ -504,6 +543,8 @@ window.onload = function () {
    document.forms.dataSearchForm.q.value = query;
    if (document.forms.dataSearchForm.creator)
       document.forms.dataSearchForm.creator.value = creator;
+   if (document.forms.dataSearchForm.project)
+      document.forms.dataSearchForm.project.value = project;
    if (document.forms.dataSearchForm.identifier)
       document.forms.dataSearchForm.identifier.value = pkgId;
    if (document.forms.dataSearchForm.taxon)
@@ -533,11 +574,12 @@ window.onload = function () {
 
    if (!query) query = "*"; // default for empty query
    QUERY_URL = makeQueryUrlBase(query, coreArea, creator, sYear, eYear,
-      datayear, pubyear, pkgId, taxon, geo, sortBy)
+      datayear, pubyear, pkgId, taxon, geo, project, sortBy)
    searchPasta(PASTA_CONFIG["limit"], pageStart);
 
    if ("PASTA_LOOKUP" in window) {
       makeAutocomplete("creator", PASTA_LOOKUP["author"]);
+      makeAutocomplete("project", PASTA_LOOKUP["projectTitle"].concat(PASTA_LOOKUP["relatedProjectTitle"]));
       makeAutocomplete("taxon", PASTA_LOOKUP["taxonomic"]);
    }
 };

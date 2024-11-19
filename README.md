@@ -29,13 +29,21 @@ Researchers and organizations publishing data in the [EDI Repository](https://po
    - `/harvester/pasta_harvester.mjs`
    - `/public/pasta.js`
 
+   Additionally, in `/public/pasta.js` replace the line `var uri = baseUri + pid;` with `var uri = baseUri + pid + "?env=staging";`. 
+
+   
+
+   Finally, in `/public/pasta.js` replace the line `var link = (citation["doi"]) ? citation["doi"].slice(0, -1) : "https://portal.edirepository.org/nis/mapbrowse?packageid=" + citation["pid"];`, with the line `var link = "https://portal-s.edirepository.org/nis/mapbrowse?packageid=" + citation["pid"];`
+
+9. Additional configuration can be done in `/public/pasta.js`. For example the abstract visibility can be toggled by changing the value of `showAbstracts`, and the length of the abstract can be set by changing the value of `abstractLimit`. 
+
 To see an example of how to embed the catalog in a web page `<iframe>`, view the page source code of the [Jornada Basin LTER Data Catalog](https://lter.jornada.nmsu.edu/data-catalog/) or experiment using the W3Schools [HTML Tryit editor](https://www.w3schools.com/html/tryit.asp?filename=tryhtml_intro).
 
 ## Features
 
 ### Autocomplete
 
-Autocomplete is currently supported for the creator and taxonomy input fields. Try typing a couple of characters into the creator box of the demo page and see what happens.
+Autocomplete is currently supported for the creator, taxonomy, and project input fields. Try typing a couple of characters into the creator box of the demo page and see what happens.
 
 Autocomplete requires creating a list of possible choices, which is automatically generated each time the GitHub Actions workflow `build_catalog` runs.
 

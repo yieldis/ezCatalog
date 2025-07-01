@@ -76,7 +76,7 @@ function getCitations(packageIds, abstracts) {
    var citations = {};
 
    packageIds.forEach(function (pid, index) {
-      var uri = baseUri + pid + "?env=staging";
+      var uri = baseUri + pid;
       makeCorsRequest(
          uri,
          header,
